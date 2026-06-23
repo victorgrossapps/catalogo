@@ -38,10 +38,22 @@ class CatalogFileManager(context: Context) {
 
     fun validatePending(catalogo: Catalogo) {
         val pending = pendingFile()
-        require(pending.exists()) { "No existe archivo temporal descargado." }
-        require(pending.length() == catalogo.pesoBytes) { "El tamaño descargado no coincide." }
-        require(pending.sha256().equals(catalogo.checksum, ignoreCase = true)) {
-            "El checksum descargado no coincide."
+        if (!pending.exists()) {
+            throw IllegalStateException("No existe archivo temporal descargado.")
+        }
+
+        val actualBytes = pending.length()
+        if (actualBytes != catalogo.pesoBytes) {
+            throw IllegalStateException(
+                "El tamaño descargado no coincide. Esperado: ${catalogo.pesoBytes} bytes. Recibido: $actualBytes bytes."
+            )
+        }
+
+        val actualChecksum = pending.sha256()
+        if (!actualChecksum.equals(catalogo.checksum, ignoreCase = true)) {
+            throw IllegalStateException(
+                "El checksum descargado no coincide. Esperado: ${catalogo.checksum}. Recibido: $actualChecksum."
+            )
         }
     }
 

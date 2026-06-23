@@ -35,6 +35,8 @@ sealed interface ApiConnectionResult {
     ) : ApiConnectionResult
 }
 
+class CatalogDownloadException(message: String) : Exception(message)
+
 class CatalogRepository(
     private val api: CatalogApiService,
     private val preferences: CatalogPreferences,
@@ -104,11 +106,28 @@ class CatalogRepository(
 
         try {
             val response = api.downloadFile(catalogo.archivoUrl)
-            require(response.isSuccessful) { "No fue posible descargar el catalogo." }
+            if (!response.isSuccessful) {
+                throw CatalogDownloadException(
+                    "Error descargando PDF. HTTP ${response.code()} ${response.message()}. URL: ${catalogo.archivoUrl}"
+                )
+            }
 
-            val body = requireNotNull(response.body()) { "La respuesta de descarga esta vacia." }
+            val contentType = response.headers()["Content-Type"].orEmpty()
+            if (contentType.isNotBlank() && !contentType.contains("pdf", ignoreCase = true)) {
+                throw CatalogDownloadException(
+                    "Contenido inválido al descargar PDF. Content-Type: $contentType. URL: ${catalogo.archivoUrl}"
+                )
+            }
+
+            val body = response.body() ?: throw CatalogDownloadException(
+                "La respuesta de descarga está vacía. URL: ${catalogo.archivoUrl}"
+            )
             files.writePending(body, onProgress)
-            files.validatePending(catalogo)
+            try {
+                files.validatePending(catalogo)
+            } catch (error: Throwable) {
+                throw CatalogDownloadException("Validación de PDF fallida. ${error.message} URL: ${catalogo.archivoUrl}")
+            }
             val active = files.promotePending()
 
             preferences.saveCatalog(
@@ -155,7 +174,13 @@ class CatalogRepository(
                     )
                 )
             }
-            throw error
+            throw if (error is CatalogDownloadException) {
+                error
+            } else {
+                CatalogDownloadException(
+                    "No fue posible descargar el catálogo. ${error.message ?: error::class.java.simpleName}. URL: ${catalogo.archivoUrl}"
+                )
+            }
         }
     }
 

@@ -38,7 +38,9 @@ data class CatalogUiState(
     val progress: Float = 0f,
     val message: String? = null,
     val error: String? = null,
-    val apiConnection: ApiConnectionUiState = ApiConnectionUiState.NotTested
+    val apiConnection: ApiConnectionUiState = ApiConnectionUiState.NotTested,
+    val lastCatalogFileUrl: String? = null,
+    val lastDownloadError: String? = null
 )
 
 class CatalogViewModel(
@@ -67,7 +69,8 @@ class CatalogViewModel(
                                     empresa = empresa,
                                     local = local,
                                     updateAvailable = result.catalogo,
-                                    message = result.catalogo.mensajeActualizacion ?: "Nuevo catalogo disponible."
+                                    lastCatalogFileUrl = result.catalogo.archivoUrl,
+                                    message = result.catalogo.mensajeActualizacion ?: "Nuevo catálogo disponible."
                                 )
                             }
 
@@ -76,7 +79,7 @@ class CatalogViewModel(
                             }
                         }
                         is UpdateResult.UpToDate -> _state.update {
-                            it.copy(loading = false, empresa = empresa, local = result.local, message = "Catalogo actualizado.")
+                            it.copy(loading = false, empresa = empresa, local = result.local, message = "Catálogo actualizado.")
                         }
                         is UpdateResult.Downloaded -> Unit
                         is UpdateResult.NoLocalCatalog -> _state.update {
@@ -132,7 +135,15 @@ class CatalogViewModel(
         if (catalogo == null) return
 
         viewModelScope.launch {
-            _state.update { it.copy(downloading = true, progress = 0f, error = null) }
+            _state.update {
+                it.copy(
+                    downloading = true,
+                    progress = 0f,
+                    error = null,
+                    lastDownloadError = null,
+                    lastCatalogFileUrl = catalogo.archivoUrl
+                )
+            }
             runCatching {
                 repository.downloadCatalog(catalogo) { progress ->
                     _state.update { it.copy(progress = progress) }
@@ -145,14 +156,18 @@ class CatalogViewModel(
                         progress = 1f,
                         updateAvailable = null,
                         local = local.copy(localPath = result.localPath),
-                        message = "Catalogo descargado correctamente."
+                        lastDownloadError = null,
+                        message = "Catálogo descargado correctamente."
                     )
                 }
             }.onFailure { error ->
+                val detail = error.message ?: "No fue posible descargar el catálogo. Se conserva la versión anterior."
                 _state.update {
                     it.copy(
                         downloading = false,
-                        error = error.message ?: "No fue posible descargar el catalogo. Se conserva la version anterior."
+                        lastCatalogFileUrl = catalogo.archivoUrl,
+                        lastDownloadError = detail,
+                        error = detail
                     )
                 }
             }

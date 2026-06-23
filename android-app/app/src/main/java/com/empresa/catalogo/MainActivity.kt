@@ -175,8 +175,13 @@ private fun UpdateScreen(
         state.updateAvailable?.let {
             Text("Nueva versión: ${it.versionCodigo}")
             Text(it.mensajeActualizacion ?: "Nuevo catálogo disponible.")
+            Text("Archivo URL: ${it.archivoUrl}")
             Button(onClick = onDownload, enabled = !state.downloading) { Text("Actualizar ahora") }
         } ?: Text("No hay actualización pendiente.")
+
+        state.lastDownloadError?.let {
+            Text("Último error de descarga: $it", color = MaterialTheme.colorScheme.error)
+        }
 
         if (state.downloading) {
             LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
@@ -217,6 +222,10 @@ private fun SettingsScreen(
                 Text("Versión catálogo: ${state.local?.versionCodigo ?: "Sin catálogo"}")
                 Text("Device UUID: ${state.local?.deviceUuid ?: "Pendiente"}")
                 Text("Última descarga: ${state.local?.downloadedAt ?: "Pendiente"}")
+                Text("Archivo URL: ${state.lastCatalogFileUrl ?: "Pendiente"}")
+                state.lastDownloadError?.let {
+                    Text("Último error de descarga: $it", color = MaterialTheme.colorScheme.error)
+                }
                 Button(onClick = onRefresh) { Text("Verificar actualización de catálogo") }
             }
         }

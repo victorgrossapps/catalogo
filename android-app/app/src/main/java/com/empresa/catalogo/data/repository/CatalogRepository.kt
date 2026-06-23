@@ -11,7 +11,9 @@ import com.empresa.catalogo.data.remote.dto.DeviceSyncDto
 import com.empresa.catalogo.data.remote.dto.DownloadEventDto
 import com.empresa.catalogo.domain.model.Catalogo
 import com.empresa.catalogo.domain.model.Empresa
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import java.io.IOException
 
 sealed interface UpdateResult {
@@ -104,64 +106,74 @@ class CatalogRepository(
     suspend fun downloadCatalog(catalogo: Catalogo, onProgress: (Float) -> Unit): UpdateResult.Downloaded {
         val deviceUuid = preferences.ensureDeviceUuid()
 
-        try {
-            val response = api.downloadFile(catalogo.archivoUrl)
-            if (!response.isSuccessful) {
-                throw CatalogDownloadException(
-                    "Error descargando PDF. HTTP ${response.code()} ${response.message()}. URL: ${catalogo.archivoUrl}"
+        return try {
+            val downloaded = withContext(Dispatchers.IO) {
+                val response = api.downloadFile(catalogo.archivoUrl)
+                if (!response.isSuccessful) {
+                    throw CatalogDownloadException(
+                        "Error descargando PDF. HTTP ${response.code()} ${response.message()}. URL: ${catalogo.archivoUrl}"
+                    )
+                }
+
+                val contentType = response.headers()["Content-Type"].orEmpty()
+                if (contentType.isNotBlank() && !contentType.contains("pdf", ignoreCase = true)) {
+                    throw CatalogDownloadException(
+                        "Contenido inválido al descargar PDF. Content-Type: $contentType. URL: ${catalogo.archivoUrl}"
+                    )
+                }
+
+                val body = response.body() ?: throw CatalogDownloadException(
+                    "La respuesta de descarga está vacía. URL: ${catalogo.archivoUrl}"
+                )
+                files.writePending(body) { progress ->
+                    onProgress(progress)
+                }
+                try {
+                    files.validatePending(catalogo)
+                } catch (error: Throwable) {
+                    throw CatalogDownloadException("Validación de PDF fallida. ${error.message} URL: ${catalogo.archivoUrl}")
+                }
+                val active = files.promotePending()
+
+                preferences.saveCatalog(
+                    catalogId = catalogo.id,
+                    versionCodigo = catalogo.versionCodigo,
+                    versionNumero = catalogo.versionNumero,
+                    checksum = catalogo.checksum,
+                    localPath = active.absolutePath
+                )
+
+                UpdateResult.Downloaded(catalogo, active.absolutePath)
+            }
+
+            withContext(Dispatchers.IO) {
+                api.registerDownload(
+                    DownloadEventDto(
+                        catalogoId = catalogo.id,
+                        deviceUuid = deviceUuid,
+                        nombreDispositivo = Build.MODEL,
+                        versionApp = BuildConfig.VERSION_NAME,
+                        versionCatalogo = catalogo.versionCodigo,
+                        estado = "exitoso"
+                    )
+                )
+
+                api.syncDevice(
+                    DeviceSyncDto(
+                        deviceUuid = deviceUuid,
+                        nombreDispositivo = Build.MODEL,
+                        versionApp = BuildConfig.VERSION_NAME,
+                        ultimoCatalogoVersion = catalogo.versionCodigo
+                    )
                 )
             }
 
-            val contentType = response.headers()["Content-Type"].orEmpty()
-            if (contentType.isNotBlank() && !contentType.contains("pdf", ignoreCase = true)) {
-                throw CatalogDownloadException(
-                    "Contenido inválido al descargar PDF. Content-Type: $contentType. URL: ${catalogo.archivoUrl}"
-                )
-            }
-
-            val body = response.body() ?: throw CatalogDownloadException(
-                "La respuesta de descarga está vacía. URL: ${catalogo.archivoUrl}"
-            )
-            files.writePending(body, onProgress)
-            try {
-                files.validatePending(catalogo)
-            } catch (error: Throwable) {
-                throw CatalogDownloadException("Validación de PDF fallida. ${error.message} URL: ${catalogo.archivoUrl}")
-            }
-            val active = files.promotePending()
-
-            preferences.saveCatalog(
-                catalogId = catalogo.id,
-                versionCodigo = catalogo.versionCodigo,
-                versionNumero = catalogo.versionNumero,
-                checksum = catalogo.checksum,
-                localPath = active.absolutePath
-            )
-
-            api.registerDownload(
-                DownloadEventDto(
-                    catalogoId = catalogo.id,
-                    deviceUuid = deviceUuid,
-                    nombreDispositivo = Build.MODEL,
-                    versionApp = BuildConfig.VERSION_NAME,
-                    versionCatalogo = catalogo.versionCodigo,
-                    estado = "exitoso"
-                )
-            )
-
-            api.syncDevice(
-                DeviceSyncDto(
-                    deviceUuid = deviceUuid,
-                    nombreDispositivo = Build.MODEL,
-                    versionApp = BuildConfig.VERSION_NAME,
-                    ultimoCatalogoVersion = catalogo.versionCodigo
-                )
-            )
-
-            return UpdateResult.Downloaded(catalogo, active.absolutePath)
+            downloaded
         } catch (error: Throwable) {
-            files.discardPending()
-            runCatching {
+            withContext(Dispatchers.IO) {
+                files.discardPending()
+            }
+            runCatching { withContext(Dispatchers.IO) {
                 api.registerDownload(
                     DownloadEventDto(
                         catalogoId = catalogo.id,
@@ -173,7 +185,7 @@ class CatalogRepository(
                         mensajeError = error.message
                     )
                 )
-            }
+            } }
             throw if (error is CatalogDownloadException) {
                 error
             } else {

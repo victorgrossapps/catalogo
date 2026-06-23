@@ -1,5 +1,8 @@
 package com.empresa.catalogo
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,25 +14,40 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,12 +73,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen(val label: String) {
-    Home("Inicio"),
-    About("Quienes somos"),
-    Catalog("Catálogo"),
-    Update("Actualizar"),
-    Settings("Configuración")
+private enum class Screen(val label: String, val icon: ImageVector, val tint: Color) {
+    Home("Inicio", Icons.Filled.Home, Color(0xFF5E35B1)),
+    About("Quienes somos", Icons.Filled.Info, Color(0xFF00897B)),
+    Catalog("Catálogo", Icons.AutoMirrored.Filled.MenuBook, Color(0xFF3949AB)),
+    Update("Actualizar", Icons.Filled.SystemUpdateAlt, Color(0xFFF57C00)),
+    Settings("Configuración", Icons.Filled.Settings, Color(0xFF6A1B9A))
 }
 
 @Composable
@@ -82,6 +100,20 @@ private fun CatalogApp() {
 
     val state by viewModel.state.collectAsState()
     var screen by remember { mutableStateOf(Screen.Home) }
+    var catalogFullScreen by remember { mutableStateOf(false) }
+    val localPath = state.local?.localPath
+
+    ApplySystemBars(fullScreen = catalogFullScreen)
+
+    if (catalogFullScreen && !localPath.isNullOrBlank()) {
+        PdfViewer(
+            localPath = localPath,
+            modifier = Modifier.fillMaxSize(),
+            fullScreen = true,
+            onClose = { catalogFullScreen = false }
+        )
+        return
+    }
 
     Row(modifier = Modifier.fillMaxSize()) {
         NavigationRail {
@@ -89,8 +121,19 @@ private fun CatalogApp() {
                 NavigationRailItem(
                     selected = screen == item,
                     onClick = { screen = item },
-                    icon = { Text(item.label.take(1)) },
-                    label = { Text(item.label) }
+                    icon = {
+                        Icon(
+                            imageVector = item.icon,
+                            contentDescription = item.label,
+                            tint = if (screen == item) item.tint else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    label = { Text(item.label) },
+                    colors = NavigationRailItemDefaults.colors(
+                        selectedIconColor = item.tint,
+                        selectedTextColor = item.tint,
+                        indicatorColor = item.tint.copy(alpha = 0.14f)
+                    )
                 )
             }
         }
@@ -102,7 +145,7 @@ private fun CatalogApp() {
             when (screen) {
                 Screen.Home -> HomeScreen(state, onOpenCatalog = { screen = Screen.Catalog })
                 Screen.About -> AboutScreen(state)
-                Screen.Catalog -> CatalogScreen(state)
+                Screen.Catalog -> CatalogScreen(state, onOpenFullScreen = { catalogFullScreen = true })
                 Screen.Update -> UpdateScreen(state, viewModel::refresh) { viewModel.download() }
                 Screen.Settings -> SettingsScreen(
                     state = state,
@@ -155,12 +198,18 @@ private fun AboutScreen(state: CatalogUiState) {
 }
 
 @Composable
-private fun CatalogScreen(state: CatalogUiState) {
+private fun CatalogScreen(state: CatalogUiState, onOpenFullScreen: () -> Unit) {
     val localPath = state.local?.localPath
     if (localPath.isNullOrBlank()) {
         Text("No hay catálogo local. Se requiere conexión inicial para descargarlo.")
     } else {
-        PdfViewer(localPath = localPath, modifier = Modifier.fillMaxSize())
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+            Button(onClick = onOpenFullScreen) {
+                Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null)
+                Text(" Abrir pantalla completa")
+            }
+            PdfViewer(localPath = localPath, modifier = Modifier.fillMaxSize())
+        }
     }
 }
 
@@ -250,4 +299,39 @@ private fun ApiConnectionStatus(status: ApiConnectionUiState) {
             Text("URL usada: ${status.url}")
         }
     }
+}
+
+@Composable
+private fun ApplySystemBars(fullScreen: Boolean) {
+    val view = LocalView.current
+    val activity = view.context.findActivity()
+
+    DisposableEffect(fullScreen, activity) {
+        val window = activity?.window
+        if (window != null) {
+            val controller = WindowInsetsControllerCompat(window, view)
+            WindowCompat.setDecorFitsSystemWindows(window, !fullScreen)
+
+            if (fullScreen) {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+
+        onDispose {
+            if (window != null) {
+                WindowCompat.setDecorFitsSystemWindows(window, true)
+                WindowInsetsControllerCompat(window, view).show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

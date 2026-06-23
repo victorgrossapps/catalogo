@@ -16,4 +16,12 @@ class ExampleTest extends TestCase
 
         $response->assertRedirect('/admin');
     }
+
+    public function test_admin_redirects_guest_to_login(): void
+    {
+        $response = $this->get('/admin');
+
+        $response->assertRedirect('/login');
+        $this->get('/login')->assertRedirect('/admin/login');
+    }
 }

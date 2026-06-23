@@ -4,7 +4,14 @@ import com.squareup.moshi.Json
 
 data class CatalogoActualResponseDto(
     val ok: Boolean,
-    val catalogo: CatalogoDto?
+    val catalogo: CatalogoDto?,
+    val message: String? = null
+)
+
+data class HealthResponseDto(
+    val ok: Boolean,
+    val service: String?,
+    val timestamp: String?
 )
 
 data class CatalogoDto(

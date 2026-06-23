@@ -3,6 +3,7 @@ package com.empresa.catalogo.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.empresa.catalogo.data.local.LocalCatalogState
+import com.empresa.catalogo.data.repository.ApiConnectionResult
 import com.empresa.catalogo.data.repository.CatalogRepository
 import com.empresa.catalogo.data.repository.UpdateResult
 import com.empresa.catalogo.domain.model.Catalogo
@@ -13,6 +14,21 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+sealed interface ApiConnectionUiState {
+    data object NotTested : ApiConnectionUiState
+    data object Testing : ApiConnectionUiState
+    data class Connected(
+        val url: String,
+        val service: String?,
+        val timestamp: String?
+    ) : ApiConnectionUiState
+    data class Error(
+        val url: String,
+        val statusCode: Int?,
+        val message: String
+    ) : ApiConnectionUiState
+}
+
 data class CatalogUiState(
     val loading: Boolean = true,
     val empresa: Empresa? = null,
@@ -21,7 +37,8 @@ data class CatalogUiState(
     val downloading: Boolean = false,
     val progress: Float = 0f,
     val message: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val apiConnection: ApiConnectionUiState = ApiConnectionUiState.NotTested
 )
 
 class CatalogViewModel(
@@ -73,10 +90,41 @@ class CatalogViewModel(
                             loading = false,
                             empresa = empresa,
                             local = local,
-                            error = if (repository.hasActiveCatalog(local)) "Modo offline. Se usara el ultimo catalogo descargado." else "Se requiere conexion inicial para descargar el catalogo."
+                            error = if (repository.hasActiveCatalog(local)) {
+                                "Modo offline. Se usará el último catálogo descargado."
+                            } else {
+                                "No se pudo conectar con el backend. Verifique la URL de la API o la conexión."
+                            }
                         )
                     }
                 }
+        }
+    }
+
+    fun testApiConnection() {
+        viewModelScope.launch {
+            _state.update { it.copy(apiConnection = ApiConnectionUiState.Testing) }
+
+            when (val result = repository.testApiConnection()) {
+                is ApiConnectionResult.Success -> _state.update {
+                    it.copy(
+                        apiConnection = ApiConnectionUiState.Connected(
+                            url = result.url,
+                            service = result.service,
+                            timestamp = result.timestamp
+                        )
+                    )
+                }
+                is ApiConnectionResult.Error -> _state.update {
+                    it.copy(
+                        apiConnection = ApiConnectionUiState.Error(
+                            url = result.url,
+                            statusCode = result.statusCode,
+                            message = result.message
+                        )
+                    )
+                }
+            }
         }
     }
 

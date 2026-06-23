@@ -15,7 +15,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "API_BASE_URL", "\"https://catalogo.example.com/api/v1/\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
         buildConfigField("String", "API_KEY", "\"change-me-in-production\"")
     }
 

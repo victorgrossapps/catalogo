@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\EmpresaConfigController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/admin');
+Route::redirect('/login', '/admin/login')->name('login');
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('guest')->group(function () {

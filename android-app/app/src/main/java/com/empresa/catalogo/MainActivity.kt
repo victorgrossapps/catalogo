@@ -37,6 +37,7 @@ import com.empresa.catalogo.data.file.CatalogFileManager
 import com.empresa.catalogo.data.local.CatalogPreferences
 import com.empresa.catalogo.data.remote.ApiClient
 import com.empresa.catalogo.data.repository.CatalogRepository
+import com.empresa.catalogo.presentation.ApiConnectionUiState
 import com.empresa.catalogo.presentation.CatalogUiState
 import com.empresa.catalogo.presentation.CatalogViewModel
 import com.empresa.catalogo.presentation.PdfViewer
@@ -57,9 +58,9 @@ class MainActivity : ComponentActivity() {
 private enum class Screen(val label: String) {
     Home("Inicio"),
     About("Quienes somos"),
-    Catalog("Catalogo"),
+    Catalog("Catálogo"),
     Update("Actualizar"),
-    Settings("Configuracion")
+    Settings("Configuración")
 }
 
 @Composable
@@ -103,7 +104,11 @@ private fun CatalogApp() {
                 Screen.About -> AboutScreen(state)
                 Screen.Catalog -> CatalogScreen(state)
                 Screen.Update -> UpdateScreen(state, viewModel::refresh) { viewModel.download() }
-                Screen.Settings -> SettingsScreen(state, viewModel::refresh)
+                Screen.Settings -> SettingsScreen(
+                    state = state,
+                    onRefresh = viewModel::refresh,
+                    onTestApi = viewModel::testApiConnection
+                )
             }
         }
     }
@@ -112,7 +117,7 @@ private fun CatalogApp() {
 @Composable
 private fun Header(state: CatalogUiState) {
     Text(
-        text = state.empresa?.nombreComercial ?: "Catalogo Comercial",
+        text = state.empresa?.nombreComercial ?: "Catálogo Comercial",
         style = MaterialTheme.typography.headlineMedium,
         fontWeight = FontWeight.Bold
     )
@@ -126,9 +131,9 @@ private fun HomeScreen(state: CatalogUiState, onOpenCatalog: () -> Unit) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text("Bienvenido", style = MaterialTheme.typography.headlineSmall)
-                Text("Presentacion comercial y catalogo offline para tablet.")
+                Text("Presentación comercial y catálogo offline para tablet.")
                 Spacer(modifier = Modifier.height(12.dp))
-                Button(onClick = onOpenCatalog) { Text("Ver catalogo") }
+                Button(onClick = onOpenCatalog) { Text("Ver catálogo") }
             }
         }
         if (state.loading) CircularProgressIndicator()
@@ -139,12 +144,12 @@ private fun HomeScreen(state: CatalogUiState, onOpenCatalog: () -> Unit) {
 private fun AboutScreen(state: CatalogUiState) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Quienes somos", style = MaterialTheme.typography.headlineSmall)
-            Text(state.empresa?.textoQuienesSomos ?: "Informacion institucional no disponible.")
-            state.empresa?.telefono?.let { Text("Telefono: $it") }
+            Text("Quiénes somos", style = MaterialTheme.typography.headlineSmall)
+            Text(state.empresa?.textoQuienesSomos ?: "Información institucional no disponible.")
+            state.empresa?.telefono?.let { Text("Teléfono: $it") }
             state.empresa?.whatsapp?.let { Text("WhatsApp: $it") }
             state.empresa?.correo?.let { Text("Correo: $it") }
-            state.empresa?.direccion?.let { Text("Direccion: $it") }
+            state.empresa?.direccion?.let { Text("Dirección: $it") }
         }
     }
 }
@@ -153,7 +158,7 @@ private fun AboutScreen(state: CatalogUiState) {
 private fun CatalogScreen(state: CatalogUiState) {
     val localPath = state.local?.localPath
     if (localPath.isNullOrBlank()) {
-        Text("No hay catalogo local. Se requiere conexion inicial para descargarlo.")
+        Text("No hay catálogo local. Se requiere conexión inicial para descargarlo.")
     } else {
         PdfViewer(localPath = localPath, modifier = Modifier.fillMaxSize())
     }
@@ -166,30 +171,74 @@ private fun UpdateScreen(
     onDownload: () -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Text("Actualizacion de catalogo", style = MaterialTheme.typography.headlineSmall)
+        Text("Actualización de catálogo", style = MaterialTheme.typography.headlineSmall)
         state.updateAvailable?.let {
-            Text("Nueva version: ${it.versionCodigo}")
-            Text(it.mensajeActualizacion ?: "Nuevo catalogo disponible.")
+            Text("Nueva versión: ${it.versionCodigo}")
+            Text(it.mensajeActualizacion ?: "Nuevo catálogo disponible.")
             Button(onClick = onDownload, enabled = !state.downloading) { Text("Actualizar ahora") }
-        } ?: Text("No hay actualizacion pendiente.")
+        } ?: Text("No hay actualización pendiente.")
 
         if (state.downloading) {
             LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
             Text("${(state.progress * 100).toInt()}%")
         }
 
-        Button(onClick = onRefresh, enabled = !state.downloading) { Text("Verificar actualizacion") }
+        Button(onClick = onRefresh, enabled = !state.downloading) { Text("Verificar actualización") }
     }
 }
 
 @Composable
-private fun SettingsScreen(state: CatalogUiState, onRefresh: () -> Unit) {
+private fun SettingsScreen(
+    state: CatalogUiState,
+    onRefresh: () -> Unit,
+    onTestApi: () -> Unit
+) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Configuracion", style = MaterialTheme.typography.headlineSmall)
-        Text("Version app: ${BuildConfig.VERSION_NAME}")
-        Text("Version catalogo: ${state.local?.versionCodigo ?: "Sin catalogo"}")
-        Text("Device UUID: ${state.local?.deviceUuid ?: "Pendiente"}")
-        Text("Ultima descarga: ${state.local?.downloadedAt ?: "Pendiente"}")
-        Button(onClick = onRefresh) { Text("Verificar actualizacion") }
+        Text("Configuración", style = MaterialTheme.typography.headlineSmall)
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Conexión API", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("API Base URL: ${BuildConfig.API_BASE_URL}")
+                ApiConnectionStatus(state.apiConnection)
+                Button(
+                    onClick = onTestApi,
+                    enabled = state.apiConnection !is ApiConnectionUiState.Testing
+                ) {
+                    Text("Probar conexión API")
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Estado del catálogo", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Versión app: ${BuildConfig.VERSION_NAME}")
+                Text("Versión catálogo: ${state.local?.versionCodigo ?: "Sin catálogo"}")
+                Text("Device UUID: ${state.local?.deviceUuid ?: "Pendiente"}")
+                Text("Última descarga: ${state.local?.downloadedAt ?: "Pendiente"}")
+                Button(onClick = onRefresh) { Text("Verificar actualización de catálogo") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ApiConnectionStatus(status: ApiConnectionUiState) {
+    when (status) {
+        ApiConnectionUiState.NotTested -> Text("Estado API: No probado")
+        ApiConnectionUiState.Testing -> Text("Estado API: Probando conexión...")
+        is ApiConnectionUiState.Connected -> {
+            Text("Estado API: API conectada correctamente", color = MaterialTheme.colorScheme.primary)
+            Text("Servicio: ${status.service ?: "No informado"}")
+            Text("Timestamp: ${status.timestamp ?: "No informado"}")
+            Text("URL usada: ${status.url}")
+        }
+        is ApiConnectionUiState.Error -> {
+            Text("Estado API: Error de conexión API", color = MaterialTheme.colorScheme.error)
+            status.statusCode?.let { Text("Código HTTP: $it") }
+            Text("Error: ${status.message}")
+            Text("URL usada: ${status.url}")
+        }
     }
 }

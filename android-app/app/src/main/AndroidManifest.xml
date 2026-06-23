@@ -6,6 +6,7 @@
         android:name=".CatalogoApp"
         android:allowBackup="true"
         android:label="Catalogo Comercial"
+        android:usesCleartextTraffic="true"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity

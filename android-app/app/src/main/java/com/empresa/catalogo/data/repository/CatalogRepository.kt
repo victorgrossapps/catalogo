@@ -12,12 +12,27 @@ import com.empresa.catalogo.data.remote.dto.DownloadEventDto
 import com.empresa.catalogo.domain.model.Catalogo
 import com.empresa.catalogo.domain.model.Empresa
 import kotlinx.coroutines.flow.Flow
+import java.io.IOException
 
 sealed interface UpdateResult {
     data class UpToDate(val local: LocalCatalogState) : UpdateResult
     data class Available(val catalogo: Catalogo, val local: LocalCatalogState) : UpdateResult
     data class Downloaded(val catalogo: Catalogo, val localPath: String) : UpdateResult
     data class NoLocalCatalog(val message: String) : UpdateResult
+}
+
+sealed interface ApiConnectionResult {
+    data class Success(
+        val service: String?,
+        val timestamp: String?,
+        val url: String
+    ) : ApiConnectionResult
+
+    data class Error(
+        val url: String,
+        val statusCode: Int?,
+        val message: String
+    ) : ApiConnectionResult
 }
 
 class CatalogRepository(
@@ -30,9 +45,52 @@ class CatalogRepository(
     suspend fun getEmpresa(): Empresa? =
         api.getEmpresa().empresa?.toDomain()
 
+    suspend fun testApiConnection(): ApiConnectionResult {
+        return try {
+            val response = api.health()
+            val body = response.body()
+
+            if (response.isSuccessful && body?.ok == true) {
+                ApiConnectionResult.Success(
+                    service = body.service,
+                    timestamp = body.timestamp,
+                    url = BuildConfig.API_BASE_URL
+                )
+            } else {
+                ApiConnectionResult.Error(
+                    url = BuildConfig.API_BASE_URL,
+                    statusCode = response.code(),
+                    message = body?.service ?: response.message().ifBlank { "Respuesta no válida de la API." }
+                )
+            }
+        } catch (error: IOException) {
+            ApiConnectionResult.Error(
+                url = BuildConfig.API_BASE_URL,
+                statusCode = null,
+                message = error.message ?: "No se pudo conectar con la API."
+            )
+        } catch (error: Throwable) {
+            ApiConnectionResult.Error(
+                url = BuildConfig.API_BASE_URL,
+                statusCode = null,
+                message = error.message ?: "Error inesperado al probar la conexión API."
+            )
+        }
+    }
+
     suspend fun checkForUpdate(local: LocalCatalogState): UpdateResult {
-        val remote = api.getCatalogoActual().catalogo?.toDomain()
-            ?: return UpdateResult.NoLocalCatalog("No hay catalogo publicado.")
+        val response = api.getCatalogoActual()
+
+        if (response.code() == 404) {
+            return UpdateResult.NoLocalCatalog("Conexión API correcta. No hay catálogo activo publicado.")
+        }
+
+        if (!response.isSuccessful) {
+            return UpdateResult.NoLocalCatalog("La API respondió con error HTTP ${response.code()} al consultar el catálogo.")
+        }
+
+        val remote = response.body()?.catalogo?.toDomain()
+            ?: return UpdateResult.NoLocalCatalog("Conexión API correcta. No hay catálogo activo publicado.")
 
         return if (remote.versionNumero > local.versionNumero) {
             UpdateResult.Available(remote, local)

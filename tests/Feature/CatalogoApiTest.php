@@ -41,10 +41,11 @@ class CatalogoApiTest extends TestCase
         ]);
 
         $this->withHeader('X-API-Key', 'test-key')
-            ->getJson('/api/v1/catalogo/actual')
+            ->getJson('http://10.0.2.2:8000/api/v1/catalogo/actual')
             ->assertOk()
             ->assertJsonPath('ok', true)
             ->assertJsonPath('catalogo.version_numero', 20260601)
+            ->assertJsonPath('catalogo.archivo_url', 'http://10.0.2.2:8000/storage/catalogos/catalogo.pdf')
             ->assertJsonStructure(['catalogo' => ['archivo_url', 'checksum', 'peso_bytes']]);
     }
 

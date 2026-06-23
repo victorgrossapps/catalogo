@@ -11,15 +11,20 @@ class EmpresaConfigResource extends JsonResource
     {
         return [
             'nombre_comercial' => $this->nombre_comercial,
-            'logo_url' => $this->logoUrl(),
+            'logo_url' => $this->publicStorageUrl($request, $this->logo_path),
             'texto_quienes_somos' => $this->texto_quienes_somos,
             'telefono' => $this->telefono,
             'whatsapp' => $this->whatsapp,
             'correo' => $this->correo,
             'direccion' => $this->direccion,
             'redes_sociales' => $this->redes_sociales_json ?? [],
-            'imagen_portada_url' => $this->imagenPortadaUrl(),
+            'imagen_portada_url' => $this->publicStorageUrl($request, $this->imagen_portada_path),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
+    }
+
+    private function publicStorageUrl(Request $request, ?string $path): ?string
+    {
+        return $path ? $request->root().'/storage/'.ltrim($path, '/') : null;
     }
 }

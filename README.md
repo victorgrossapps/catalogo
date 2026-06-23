@@ -99,16 +99,29 @@ La URL de API y API key se configuran en `android-app/app/build.gradle.kts` medi
 
 ### Estado de validación Android
 
-La app Android quedó implementada a nivel de estructura y lógica base, pero no fue compilada ni probada en tablet en este entorno porque no hay Java, Gradle ni Android Studio configurados en el PATH.
+La app Android ya compila localmente con el JDK embebido de Android Studio y Gradle Wrapper. El APK debug se genera en:
 
-Antes de considerarla validada funcionalmente se debe:
+`android-app/app/build/outputs/apk/debug/app-debug.apk`
+
+Comando usado:
+
+```powershell
+$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"
+$env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
+$env:ANDROID_SDK_ROOT="$env:LOCALAPPDATA\Android\Sdk"
+.\gradlew.bat assembleDebug --no-daemon
+```
+
+Resultado local reportado: `BUILD SUCCESSFUL`.
+
+Antes de considerarla validada de extremo a extremo todavía se debe:
 
 1. Abrir `android-app/` en Android Studio.
 2. Sincronizar Gradle.
-3. Corregir errores de compilación si aparecen.
-4. Ejecutar en emulador o tablet real.
-5. Probar descarga con PDF real.
-6. Activar modo avión y validar catálogo offline.
+3. Ejecutar en emulador o tablet real.
+4. Probar descarga con PDF real.
+5. Activar modo avión y validar catálogo offline.
+6. Validar UI en orientación horizontal.
 
 ## Validación backend
 
@@ -122,11 +135,15 @@ Resultado local reportado: `7 tests passed`.
 
 ## Estado real del avance
 
-El backend quedó implementado y validado con pruebas iniciales. La app Android quedó implementada a nivel de estructura y lógica base, pero requiere compilación, sincronización Gradle y pruebas en dispositivo Android real antes de considerarse validada funcionalmente.
+El backend quedó implementado y validado con pruebas iniciales. La app Android quedó implementada y compila en modo debug, pero aún requiere prueba funcional en emulador o tablet Android real antes de considerarse validada de extremo a extremo.
 
 ## Git
 
-El workspace no estaba inicializado como repositorio Git al momento de la implementación. Antes de continuar se recomienda inicializar Git, revisar `.gitignore` y crear un primer commit base.
+El repositorio local está inicializado y vinculado al remoto:
+
+`https://github.com/victorgrossapps/catalogo.git`
+
+El primer commit base ya fue enviado a `origin/main`. Los cambios posteriores de compilación Android deben confirmarse en un nuevo commit.
 
 `.gitignore` ya contempla:
 

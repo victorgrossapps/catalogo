@@ -174,7 +174,7 @@ private fun UpdateScreen(
         } ?: Text("No hay actualizacion pendiente.")
 
         if (state.downloading) {
-            LinearProgressIndicator(progress = state.progress, modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
             Text("${(state.progress * 100).toInt()}%")
         }
 

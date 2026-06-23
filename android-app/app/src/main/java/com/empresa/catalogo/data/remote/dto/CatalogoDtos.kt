@@ -9,9 +9,9 @@ data class CatalogoActualResponseDto(
 )
 
 data class HealthResponseDto(
-    val ok: Boolean,
-    val service: String?,
-    val timestamp: String?
+    @Json(name = "ok") val ok: Boolean,
+    @Json(name = "service") val service: String?,
+    @Json(name = "timestamp") val timestamp: String?
 )
 
 data class CatalogoDto(
